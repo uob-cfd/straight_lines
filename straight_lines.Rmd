@@ -1,0 +1,345 @@
+---
+title: "Straight lines"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Looking for straight line relationships
+
+We go back to the AirBnB data:
+
+## Loading the data
+
+```{r}
+airbnb <- read.csv('amsterdam_airbnb_2_2021.csv')
+head(airbnb)
+```
+
+There are some very high values in the `price` column.
+
+```{r}
+hist(airbnb$price)
+```
+
+We subset the data frame to give us just the more realistic prices.
+
+```{r}
+ok_airbnb <- subset(airbnb, airbnb$price < 1000)
+```
+
+Now let's try again:
+
+```{r}
+hist(ok_airbnb$price)
+```
+
+Now we want to look at relationship between the number of bedrooms and the price.
+
+First, to be nice and clean, I select the columns I want:
+
+```{r}
+price <- ok_airbnb$price
+beds <- ok_airbnb$bedrooms
+```
+
+I am interested in the relationship between number of bedrooms and price:
+
+```{r}
+plot(beds, price)
+```
+
+It looks like there might be some kind of straight-line relationship between the number of bedrooms and the price.  Here's what R thinks that is.  Remember the tilde `~` means "as a function of"
+
+```{r}
+fit <- lm(price ~ beds)
+summary(fit)
+```
+
+The cooefficients of the fit give the intercept and slope:
+
+```{r}
+fit$coefficients
+```
+
+```{r}
+intercept <- fit$coefficients[1]
+slope <- fit$coefficients[2]
+intercept
+slope
+```
+
+Put that straight line on the plot:
+
+```{r}
+plot(beds, price)
+abline(intercept, slope)
+```
+
+Actually, `abline` is clever enough to work out that is what we mean, when we pass the `fit` itself:
+
+```{r}
+plot(beds, price)
+abline(fit)
+```
+
+The slope is the increase in price for an increase by one bedroom.
+
+*Correlation* is a measure of how well this line explains the data.  It varies continuously between -1 and 1, where 1 and -1 mean the line fully explains the data, and zero means the line explains nothing in the data. Positive correlations mean the slope is positive, negative mean the slope is negative.
+
+```{r}
+cor(beds, price)
+```
+
+Note that `price` and `beds` have very different spread and center.
+
+```{r}
+hist(price)
+```
+
+```{r}
+hist(beds)
+```
+
+We will use the mean and standard deviation as measures of center and spread:
+
+```{r}
+mean(price)
+sd(price)
+```
+
+```{r}
+mean(beds)
+sd(beds)
+```
+
+The distributions have very different centers (means) and spreads (standard deviations).
+
+We can force them to have the same mean and standard deviation by applying the z-score transformation.
+
+## Z score transformation
+
+We first subtract the mean, to give the deviations.  The sum and therefore the mean of the deviations, is (almost exactly) zero:
+
+```{r}
+dev_price <- price - mean(price)
+mean(dev_price)
+```
+
+The standard deviation hasn't changed though:
+
+```{r}
+sd(dev_price)
+```
+
+We set the values to have a standard deviation of 1, by dividing by the standard deviation.  This gives the *z score*:
+
+```{r}
+z_price <- dev_price / sd(price)
+head(z_price)
+```
+
+Now the values have a standard deviation of 1:
+
+```{r}
+sd(z_price)
+```
+
+We can see the center and spread on the histogram:
+
+```{r}
+hist(z_price)
+```
+
+We do the same for `beds`:
+
+```{r}
+dev_beds <- beds - mean(beds)
+z_beds <- dev_beds / sd(beds)
+head(z_beds)
+```
+
+```{r}
+hist(z_beds)
+```
+
+The plot of `z_beds` and `z_price` looks similar to the original plot, but now the ranges on the axes are comparable:
+
+```{r}
+plot(z_beds, z_price)
+```
+
+We find the "best-fitting" line (we haven't defined what we mean by "best" yet).
+
+```{r}
+z_fit <- lm(z_price ~ z_beds)
+summary(z_fit)
+```
+
+Notice the Intercept is (almost exactly) zero.
+
+Now look at the slope:
+
+```{r}
+z_slope <- z_fit$coefficients[2]
+z_slope
+```
+
+Notice this is exactly the correlation of the original variables:
+
+```{r}
+cor(beds, price)
+```
+
+Another way of explaining the correlation is to say it is the slope of the line relating two variables, once they have been converted to z-scores.
+
+```{r}
+plot(z_beds, z_price)
+abline(z_fit$coefficients[1], z_fit$coefficients[2])
+```
+
+Because it is the slope of the line, it means that for every 1 unit increase in `z_beds`, `z_price` goes up by 0.55 units.
+
+Put another way, for every increase of 1 standard deviation in `beds`, `price` increases by 0.55 standard deviations.
+
+How do we find this slope?
+
+We can ask R, of course, as we have done.  We can also calculate it simply ourselves.
+
+First we multiply the z scores together, z score for position 1 times z score for position 1, z score for position 2 times z score for position 2, and so on:
+
+```{r}
+z_beds[1] * z_price[1]
+z_beds[2] * z_price[2]
+z_beds[3] * z_price[3]
+```
+
+We can do this all in one go with:
+
+```{r}
+z_by_z <- z_beds * z_price
+head(z_by_z)
+```
+
+We take the sum of these values and divide by (n - 1).  It's the correlation, and the slope!
+
+```{r}
+n <- length(z_by_z)
+adj_mean_zz <- sum(z_by_z) / (n - 1)
+adj_mean_zz
+```
+
+We said before that this means there is a 0.55 standard deviation increase in `price` for every 1 standard deviation increase in `beds`.
+
+Put another way, this means there is an increase of `0.55 * sd(price)` on the y axis for every increase of `sd(beds)` on the x axis. Here's the increase on the y axis for a one standard deviation increase in x:
+
+```{r}
+for_1_sd_beds <- z_slope * sd(price)
+for_1_sd_beds
+```
+
+For an increase of 1 on the original x axis (`beds`), we divide by `sd(beds)`:
+
+```{r}
+for_1_bed <- for_1_sd_beds / sd(beds)
+for_1_bed
+```
+
+This is the slope of the original line, before we did the z transformation.  We stored that before as `slope`:
+
+```{r}
+slope
+```
+
+## Recipe for the correlation coefficient
+
+* Convert both sets of values to z scores
+* Multiply the z score values together
+* take the sum, divide by (n - 1)
+* call this `r`.
+
+## Getting the "best-fit" slope for the original data
+
+* Multiply `r` by the standard deviation of the the values on the y axis and divide by the standard deviation of the values on the x axis.
+
+## Getting the intercept for the original data
+
+We know the slope for the original data, after we have undone the division by the standard deviation that we used in the z-score procedure. Now we need to undo the subtraction of the means.  Doing this moves the coordinate from the z-score graph to (0, 0) to position (mean of x, mean of y) on the original axes.   Now we have a point on the original line (mean of x, mean of y).  Given this point, and the slope, we can calculate the intercept.  To see why, draw a picture of the point, and the slope, and see where the line crosses the y axis.
+
+```{r}
+mean(price) - slope * mean(beds)
+```
+
+Indeed, this is the same as:
+
+```{r}
+fit$coefficients[1]
+```
+
+## Another way
+
+It may be useful to think of the steps above like this.
+
+Call the original values `x` and `y`:
+
+```{r}
+x <- beds
+y <- price
+```
+
+`n` is the number of values in each vector:
+
+```{r}
+n <- length(x)
+```
+
+Call the versions with their means subtracted `xm` and `ym`:
+
+```{r}
+xm <- x - mean(x)
+ym <- y - mean(y)
+```
+
+Call the z score versions `xz` and `yz`:
+
+```{r}
+xz <- xm / sd(x)
+yz <- ym / sd(y)
+```
+
+We found the "best" slope relating `xz` and `yz`:
+
+```{r}
+z_slope <- sum(xz * yz) / (n - 1)
+z_slope
+```
+
+Remember that the intercept is 0.  This means that our line has the formula `yz = xz * z_slope`.
+
+Because of our definition of `yz` and `xz` above, we can also write this as: `ym / sd(y) =  xm / sd(x) * z_slope`.
+
+So `ym = xm * z_slope / sd(x) * sd(y)`.
+
+For neatness define `s =  z_slope / sd(x) * sd(y)`.  In our case:
+
+```{r}
+s <- z_slope / sd(x) * sd(y)
+s
+```
+
+Now we can write the above as ``ym = xm * s`.
+
+Because of our definition of `xm` and `ym` above, we can also write:
+
+`y - mean(y) = (x - mean(x)) * s`
+
+So:
+
+`y = x * s - mean(x) * s + mean(y)`
+
+The slope is `s` and the intercept is `mean(y) - mean(x) * s`.   In our case:
+
+```{r}
+intercept <- mean(y) - mean(x) * s
+intercept
+```
